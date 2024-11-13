@@ -16,7 +16,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { User } from "@/lib/models/user";
 import { fetchUserData } from "@/lib/api/users.service";
 import { removeToken } from "@/lib/auth";
-import { Search } from "lucide-react";
+import { PlusCircle, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 const Logo = () => (
@@ -66,16 +66,25 @@ const Navbar = () => {
         <Link href="/">
           <Logo />
         </Link>
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 max-w-md mx-4">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Rechercher par titre..."
+            placeholder="Rechercher ..."
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-8"
           />
         </div>
         <div className="flex items-center space-x-4">
+          {user && (
+            <Button
+              onClick={() => router.push("/ads/new")}
+              className="flex items-center"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Créer une annonce
+            </Button>
+          )}
           <ModeToggle />
           {user ? (
             <DropdownMenu>
