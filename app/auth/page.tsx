@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -12,46 +12,229 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { login, register } from "@/lib/auth";
+import { login, register, resetPassword } from "@/lib/auth";
+import { UserRole } from "@/lib/models/user";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { Loader2 } from "lucide-react";
 
-function AuthPageComponent() {
+const loginSchema = z.object({
+  email: z.string().email("Email invalide"),
+  password: z
+    .string()
+    .min(3, "Le mot de passe doit contenir au moins 3 caractères"),
+});
+
+const registerSchema = z
+  .object({
+    firstName: z
+      .string()
+      .min(2, "Le prénom doit contenir au moins 2 caractères"),
+    lastName: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
+    email: z.string().email("Email invalide"),
+    password: z
+      .string()
+      .min(6, "Le mot de passe doit contenir au moins 6 caractères"),
+    confirmPassword: z.string(),
+    phone: z.string().optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Les mots de passe ne correspondent pas",
+    path: ["confirmPassword"],
+  });
+
+const resetPasswordSchema = z.object({
+  email: z.string().email("Email invalide"),
+});
+
+function ForgotPasswordDialog() {
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const form = useForm<z.infer<typeof resetPasswordSchema>>({
+    resolver: zodResolver(resetPasswordSchema),
+    defaultValues: {
+      email: "",
+    },
+  });
+
+  const onSubmit = async (values: z.infer<typeof resetPasswordSchema>) => {
+    setIsLoading(true);
+    try {
+      await resetPassword(values.email);
+      toast({
+        title: "Email envoyé",
+        description:
+          "Si un compte existe avec cette adresse email, vous recevrez un lien de réinitialisation.",
+      });
+      setIsOpen(false);
+    } catch {
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite. Veuillez réessayer.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="link" className="px-0">
+          Mot de passe oublié ?
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Réinitialisation du mot de passe</DialogTitle>
+          <DialogDescription>
+            Entrez votre adresse email pour recevoir un lien de réinitialisation
+            de mot de passe.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="nom@exemple.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Envoi en cours...
+                  </>
+                ) : (
+                  "Envoyer le lien"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AuthForm() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
 
-  const handleSubmit = async (
-    event: React.FormEvent<HTMLFormElement>,
-    type: "login" | "register"
-  ) => {
-    event.preventDefault();
+  const loginForm = useForm<z.infer<typeof loginSchema>>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  const registerForm = useForm<z.infer<typeof registerSchema>>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      phone: "",
+    },
+  });
+
+  const handleAuthSuccess = () => {
+    router.push("/");
+    router.refresh();
+  };
+
+  const onLoginSubmit = async (values: z.infer<typeof loginSchema>) => {
     setIsLoading(true);
-
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-
     try {
-      let response = null;
-      if (type === "login") {
-        response = await login(email, password);
+      const response = await login(values.email, values.password);
+      if (response) {
+        toast({
+          title: "Connexion réussie",
+          description: "Bienvenue sur notre plateforme !",
+        });
+        handleAuthSuccess();
       } else {
-        const fullName = formData.get("name") as string;
-        response = await register(email, password, fullName);
+        toast({
+          title: "Erreur",
+          description: "Email ou mot de passe incorrect",
+          variant: "destructive",
+        });
       }
+    } catch {
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite. Veuillez réessayer.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onRegisterSubmit = async (values: z.infer<typeof registerSchema>) => {
+    setIsLoading(true);
+    try {
+      const response = await register(
+        values.email,
+        values.password,
+        values.firstName,
+        values.lastName,
+        UserRole.TRAVELER,
+        values.phone
+      );
 
       if (response) {
         toast({
-          title: type === "login" ? "Connexion réussie" : "Inscription réussie",
-          description: "Bienvenue sur notre plateforme !",
+          title: "Inscription réussie",
+          description: "Votre compte a été créé avec succès !",
         });
-        router.push(callbackUrl);
+
+        const loginResponse = await login(values.email, values.password);
+        if (loginResponse) {
+          handleAuthSuccess();
+        }
       } else {
-        throw new Error("Authentication failed");
+        toast({
+          title: "Erreur",
+          description: "Cette adresse email est déjà utilisée",
+          variant: "destructive",
+        });
       }
     } catch {
       toast({
@@ -65,7 +248,7 @@ function AuthPageComponent() {
   };
 
   return (
-    <Card className="w-[350px] mx-auto">
+    <Card className="w-[400px] mx-auto">
       <CardHeader>
         <CardTitle>Bienvenue</CardTitle>
         <CardDescription>
@@ -78,97 +261,168 @@ function AuthPageComponent() {
             <TabsTrigger value="login">Connexion</TabsTrigger>
             <TabsTrigger value="register">Inscription</TabsTrigger>
           </TabsList>
+
           <TabsContent value="login">
-            <form onSubmit={(e) => handleSubmit(e, "login")}>
-              <div className="grid w-full items-center gap-4">
-                <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    placeholder="Entrez votre email"
-                    type="email"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="password">Mot de passe</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    placeholder="Entrez votre mot de passe"
-                    type="password"
-                    required
-                  />
-                </div>
-              </div>
-              <Button
-                className="w-full mt-4"
-                type="submit"
-                disabled={isLoading}
+            <Form {...loginForm}>
+              <form
+                onSubmit={loginForm.handleSubmit(onLoginSubmit)}
+                className="space-y-4"
               >
-                {isLoading ? "Chargement..." : "Se connecter"}
-              </Button>
-            </form>
+                <FormField
+                  control={loginForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="nom@exemple.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={loginForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mot de passe</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button className="w-full" type="submit" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Connexion en cours...
+                    </>
+                  ) : (
+                    "Se connecter"
+                  )}
+                </Button>
+              </form>
+            </Form>
           </TabsContent>
+
           <TabsContent value="register">
-            <form onSubmit={(e) => handleSubmit(e, "register")}>
-              <div className="grid w-full items-center gap-4">
-                <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="name">Nom</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    placeholder="Entrez votre nom"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    placeholder="Entrez votre email"
-                    type="email"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="password">Mot de passe</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    placeholder="Choisissez un mot de passe"
-                    type="password"
-                    required
-                  />
-                </div>
-              </div>
-              <Button
-                className="w-full mt-4"
-                type="submit"
-                disabled={isLoading}
+            <Form {...registerForm}>
+              <form
+                onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
+                className="space-y-4"
               >
-                {isLoading ? "Chargement..." : "S'inscrire"}
-              </Button>
-            </form>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={registerForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Prénom</FormLabel>
+                        <FormControl>
+                          <Input placeholder="John" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={registerForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nom</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={registerForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="nom@exemple.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={registerForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mot de passe</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={registerForm.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirmer le mot de passe</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={registerForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Téléphone (optionnel)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+33 6 12 34 56 78" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button className="w-full" type="submit" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Inscription en cours...
+                    </>
+                  ) : (
+                    "S'inscrire"
+                  )}
+                </Button>
+              </form>
+            </Form>
           </TabsContent>
         </Tabs>
       </CardContent>
       <CardFooter className="flex justify-center">
-        <Button
-          variant="link"
-          className="px-0"
-          onClick={() =>
-            toast({
-              title: "Réinitialiser le mot de passe",
-              description:
-                "La fonctionnalité de réinitialisation du mot de passe sera implémentée prochainement",
-            })
-          }
-        >
-          Mot de passe oublié ?
-        </Button>
+        <ForgotPasswordDialog />
       </CardFooter>
     </Card>
   );
@@ -176,8 +430,16 @@ function AuthPageComponent() {
 
 export default function AuthPage() {
   return (
-    <Suspense fallback="Chargement...">
-      <AuthPageComponent />
-    </Suspense>
+    <div className="container mx-auto flex min-h-[calc(100vh-4rem)] items-center justify-center py-8">
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        }
+      >
+        <AuthForm />
+      </Suspense>
+    </div>
   );
 }

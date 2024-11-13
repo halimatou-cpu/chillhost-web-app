@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,9 +11,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { useRouter } from "next/navigation";
-import { ModeToggle } from "./mode-toggle";
+import { redirect, useRouter } from "next/navigation";
+import { ModeToggle } from "@/components/mode-toggle";
 import { User } from "@/lib/models/user";
+import { fetchUserData } from "@/lib/api/users.service";
+import { removeToken } from "@/lib/auth";
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 const Logo = () => (
   <div className="flex items-center space-x-2">
@@ -25,23 +29,52 @@ const Logo = () => (
 );
 
 const Navbar = () => {
-  const [user, setUser] = useState<User | null>(null); // Ceci serait remplacé par l'état d'authentification réel
+  const [user, setUser] = useState<User | null>(null);
+  const [search, setSearch] = useState("");
   const router = useRouter();
 
   const handleAuth = (action: "login" | "register") => {
-    router.push(
-      `/auth?action=${action}&callbackUrl=${encodeURIComponent(
-        window.location.href
-      )}`
-    );
+    router.push(`/auth?action=${action}`);
   };
 
+  const handleLogout = () => {
+    removeToken();
+    setUser(null);
+    redirect("/");
+  };
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    // Implement search logic here
+  };
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const user = await fetchUserData();
+        setUser(user);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    fetchUser();
+  }, [router]);
+
   return (
-    <nav className="border-b">
-      <div className="container mx-auto px-4 py-2 flex justify-between items-center">
+    <header className="sticky p-2 top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 items-center justify-between">
         <Link href="/">
           <Logo />
         </Link>
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par titre..."
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="pl-8"
+          />
+        </div>
         <div className="flex items-center space-x-4">
           <ModeToggle />
           {user ? (
@@ -61,7 +94,7 @@ const Navbar = () => {
                 <DropdownMenuItem>
                   <Link href="/settings">Paramètres</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setUser(null)}>
+                <DropdownMenuItem onClick={handleLogout}>
                   Déconnexion
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -78,7 +111,7 @@ const Navbar = () => {
           )}
         </div>
       </div>
-    </nav>
+    </header>
   );
 };
 

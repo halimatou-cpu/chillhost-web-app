@@ -4,12 +4,13 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import Navbar from "@/components/Navbar";
 import { Analytics } from "@vercel/analytics/next";
+import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Professional Next.js App",
-  description: "A professional Next.js application with a custom theme",
+  title: "Chillhost Main App",
+  description: "A professional Next.js app for janitorial services.",
 };
 
 export default function RootLayout({
@@ -28,6 +29,7 @@ export default function RootLayout({
         >
           <Navbar />
           <main className="container mx-auto px-4 py-8">{children}</main>
+          <Toaster />
           <Analytics />
         </ThemeProvider>
       </body>
